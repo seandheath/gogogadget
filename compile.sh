@@ -16,12 +16,12 @@ fi
 ARGC=$#
 GOOS=""
 GOARCH=""
-FNAME="ggg"
+FNAME="gogogadget"
 if [ $ARGC -gt "0" ]; then
     if [ $ARGC -eq 2 ]; then
         GOOS=$1
         GOARCH=$2
-        FNAME="ggg$GOOS$GOARCH"
+        FNAME="$FNAME$GOOS$GOARCH"
         echo "Building GoGoGadget for $GOOS/$GOARCH"
     else 
         help
