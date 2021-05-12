@@ -87,23 +87,28 @@ func shell(args map[string]commando.ArgValue, flags map[string]commando.FlagValu
 	sendCommand := func(cmd string) {
 		args := strings.Fields(cmd)
 
-		command := exec.Command(args[0], args[1:]...)
+		var out []byte
+		var err2 error
+		if len(args) < 2 {
+			out, err2 = exec.Command(args[0]).Output()
+		} else {
+			out, err2 = exec.Command(args[0], args[1:]...).Output()
+		}
 
-	 	command.Stderr = conn
-	 	command.Stdout = conn
-	 	err = command.Run()
-	 	if err != nil {
-	  		fmt.Fprintln(conn, err)
-	 	}
+		if err2 != nil {
+			fmt.Fprintf(conn, "%s\n",err2)
+		}
+
+		fmt.Fprintf(conn, "%s\n",out)
 	}
 
 	for {
-		fmt.Fprint(conn, "$ ")
 		remoteCmd, err := bufio.NewReader(conn).ReadString('\n')
 		check(err)
 		if err != nil {
             return
         }
+		
 		if newCmd := strings.TrimSuffix(remoteCmd, "\n"); len(newCmd) > 0 {
 			sendCommand(newCmd)
 		}
