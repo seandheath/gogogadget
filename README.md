@@ -17,3 +17,7 @@ Simple file downloader - point it to a URL and it will download it.
 ## Pivot
 
 Take traffic in on one port and send it out to another. 
+
+## Shell
+
+Simple reverse TCP shell
