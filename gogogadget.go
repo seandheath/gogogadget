@@ -88,6 +88,7 @@ func initiateShellConnection(args map[string]commando.ArgValue) (net.Conn, error
 }
 
 func createShell(conn net.Conn) func(string){
+	// Actually executes the command (with a special case for Windows)
 	execCommand := func(osString string, args []string) *exec.Cmd{
 		switch osString {
 		case "windows":
@@ -100,6 +101,7 @@ func createShell(conn net.Conn) func(string){
 		}
 	}
 
+	// Handles builtin shell commands like cd and exit
 	handleBuiltins := func(cmd string, args []string) bool {
 		switch args[0] {
 		case "cd":
@@ -120,6 +122,7 @@ func createShell(conn net.Conn) func(string){
 		return false
 	}
 
+	// Shell handler function
 	handleCommand := func(cmd string) {
 		args := strings.Fields(cmd)
 
@@ -165,15 +168,18 @@ func shell(args map[string]commando.ArgValue, flags map[string]commando.FlagValu
 
 	// Shell loop
 	for {
+		// Print prompt
 		prompt := getShellPrompt()
-
 		fmt.Fprintf(conn, "%s ", prompt)
+
+		// Read input from user
 		remoteCmd, err := bufio.NewReader(conn).ReadString('\n')
 		check(err)
 		if err != nil {
             return
         }
 
+        // Execute
 		if newCmd := strings.TrimSuffix(remoteCmd, "\n"); len(newCmd) > 0 {
 			shell(newCmd)
 		}
