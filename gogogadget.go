@@ -7,7 +7,11 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/google/gopacket"
+	"github.com/google/gopacket/layers"
+	"github.com/google/gopacket/pcapgo"
 	"github.com/thatisuday/commando"
 )
 
@@ -89,8 +93,39 @@ func CopyIO(src, dest net.Conn) {
 	io.Copy(src, dest)
 }
 
+func pcap(args map[string]commando.ArgValue, flags map[string]commando.FlagValue) {
+	i := args["interface"].Value
+	outfile, err := flags["outfile"].GetString()
+	check(err)
+
+	f, err := os.Create(outfile)
+	check(err)
+	defer f.Close()
+
+	pw := pcapgo.NewWriter(f)
+	if err := pw.WriteFileHeader(1600, layers.LinkTypeEthernet); err != nil {
+		log.Fatalf("WriteFileHeader: %v", err)
+	}
+
+	h, err := pcapgo.NewEthernetHandle(i)
+	check(err)
+
+	ps := gopacket.NewPacketSource(h, layers.LayerTypeEthernet)
+	for p := range ps.Packets() {
+		if err := pw.WritePacket(p.Metadata().CaptureInfo, p.Data()); err != nil {
+			log.Fatalf("pcap.WritePacket(): %v", err)
+		}
+	}
+}
+
 func main() {
 
+	// get timestamp
+	ct := time.Now()
+	ts := ct.Format(time.RFC3339)
+	fmt.Println(ts)
+
+	// get working directory
 	wd, err := os.Getwd()
 	check(err)
 
@@ -111,16 +146,16 @@ func main() {
 		AddFlag("port,p", "port to serve on", commando.String, "8080").
 		SetAction(server)
 
-	// Download file command
+	// Download file
 	commando.
 		Register("download").
 		SetShortDescription("downloads a file from a URL").
 		SetDescription("This command downloads the file at a provided URL").
 		AddArgument("url", "target URL", "").
-		AddFlag("path,p", "output file", commando.String, wd+"/outfile").
+		AddFlag("outfile,o", "output file", commando.String, wd+"/outfile").
 		SetAction(download)
 
-	//Pivot command
+	// Pivot command
 	commando.
 		Register("pivot").
 		SetShortDescription("sets up a forwarding service").
@@ -130,6 +165,14 @@ func main() {
 		AddFlag("protocol,p", "protocol, defaults to tcp", commando.String, "tcp").
 		SetAction(pivot)
 
-	commando.Parse(nil)
+	// PCAP file
+	commando.
+		Register("pcap").
+		SetShortDescription("captures network traffic").
+		SetDescription("Captures network traffic into a pcap file.").
+		AddArgument("interface", "interface to capture on", "").
+		AddFlag("outfile,o", "output file", commando.String, wd+"/"+ts+".pcap").
+		SetAction(pcap)
 
+	commando.Parse(nil)
 }
